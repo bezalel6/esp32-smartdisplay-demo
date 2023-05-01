@@ -1,72 +1,146 @@
-#include <Arduino.h>
+// 测试通过
 
-#include <esp32_smartdisplay.h>
+#include <FS.h>
+#include <SD.h>
+#include <SPI.h>
 
-// LVGL Objects
-static lv_obj_t *label_timer;
-static lv_obj_t *label_some_text;
+#include <vector>
 
-void display_update()
-{
-    char time_buffer[32];
-    sprintf(time_buffer, "%d", millis());
-    lv_label_set_text(label_timer, time_buffer);
+#include "ESP32_SPI_9341.h"
+
+#define SD_SCK 18
+#define SD_MISO 19
+#define SD_MOSI 23
+#define SD_CS 5
+
+#define LIGHT_ADC 34
+
+int led_pin[3] = {17, 4, 16};
+
+SPIClass SD_SPI;
+
+LGFX lcd;
+void touch_calibration();
+void touch_continue();
+void led_set(int i);
+void setup(void) {
+    pinMode(led_pin[0], OUTPUT);
+    pinMode(led_pin[1], OUTPUT);
+    pinMode(led_pin[2], OUTPUT);
+
+    Serial.begin(115200);
+
+    // pinMode(LCD_BL, OUTPUT);
+    // digitalWrite(LCD_BL, HIGH);
+
+    lcd.init();
+    // sd_init();
+    // sd_test();
+
+    // lcd.setRotation(0);
+    // print_img(SD, "/logo.bmp", 240, 320);
+
+    delay(1000);
+
+    // touch_calibration();
+    touch_continue();
 }
 
-void btn_event_cb(lv_event_t *e)
-{
-    auto code = lv_event_get_code(e);
-    auto btn = lv_event_get_target(e);
-    if (code == LV_EVENT_CLICKED)
-    {
-        static uint8_t cnt = 0;
-        cnt++;
+static int colors[] = {TFT_RED, TFT_GREEN, TFT_BLUE, TFT_YELLOW, TFT_OLIVE};
 
-        auto label = lv_obj_get_child(btn, 0);
-        lv_label_set_text_fmt(label, "Button: %d", cnt);
+int i = 0;
+long runtime_0 = 0;
+long runtime_1 = 0;
+
+void loop(void) {
+    if ((millis() - runtime_0) > 1000) {
+        led_set(i);
+        lcd.fillScreen(colors[i++]);
+
+        if (i > 4) {
+            i = 0;
+        }
+
+        runtime_0 = millis();
+    }
+
+    if ((millis() - runtime_1) > 300) {
+        int adc_value = analogRead(LIGHT_ADC);
+        Serial.printf("ADC:%d\n", adc_value);
+        if (adc_value > 50)
+            lcd.setBrightness(50);
+        else
+            lcd.setBrightness(255);
+        runtime_1 = millis();
+    }
+    delay(10);
+}
+
+void touch_calibration() {
+    lcd.fillScreen(TFT_YELLOW);
+
+    lcd.setTextColor(TFT_BLACK);
+    lcd.setTextSize(4);
+    lcd.setCursor(70, 110);
+    lcd.println("SCREEN");
+    lcd.setCursor(70, 150);
+    lcd.println("CALIBRATION");
+
+    // タッチを使用する場合、キャリブレーションを行います。画面の四隅に表示される矢印の先端を順にタッチしてください。
+    std::uint16_t fg = TFT_WHITE;
+    std::uint16_t bg = TFT_BLACK;
+    if (lcd.isEPD())
+        std::swap(fg, bg);
+    lcd.calibrateTouch(nullptr, fg, bg, std::max(lcd.width(), lcd.height()) >> 3);
+}
+
+void touch_continue() {
+    lcd.fillScreen(TFT_YELLOW);
+
+    lcd.fillRect(60, 100, 120, 120, TFT_BLACK);
+
+    lcd.setTextColor(TFT_MAGENTA);
+    lcd.setTextSize(2);
+    lcd.setCursor(70, 110);
+    lcd.println(" TOUCH");
+    lcd.setCursor(70, 130);
+    lcd.println("  TO");
+    lcd.setCursor(70, 150);
+    lcd.println("CONTINUE");
+
+    int pos[2] = {0, 0};
+
+    lcd.drawPixel(50, 50, TFT_BROWN);
+
+    while (1) {
+        if (lcd.getTouch(&pos[0], &pos[1])) {
+            if (pos[0] > 60 && pos[0] < 180 && pos[1] > 120 && pos[1] < 240)
+                break;
+            delay(100);
+        }
     }
 }
 
-void setup_mainscreen()
-{
-    // Clear screen
-    lv_obj_clean(lv_scr_act());
+void led_set(int i) {
+    if (i == 0) {
+        digitalWrite(led_pin[0], LOW);
+        digitalWrite(led_pin[1], HIGH);
+        digitalWrite(led_pin[2], HIGH);
+    }
+    if (i == 1) {
+        digitalWrite(led_pin[0], HIGH);
+        digitalWrite(led_pin[1], LOW);
+        digitalWrite(led_pin[2], HIGH);
+    }
+    if (i == 2) {
+        digitalWrite(led_pin[0], HIGH);
+        digitalWrite(led_pin[1], HIGH);
+        digitalWrite(led_pin[2], LOW);
+    }
 
-    // Create a buttom
-    auto btn = lv_btn_create(lv_scr_act());
-    lv_obj_set_pos(btn, 10, 10);
-    lv_obj_set_size(btn, 120, 50);
-    lv_obj_add_event_cb(btn, btn_event_cb, LV_EVENT_ALL, NULL);
-    // Set label to Button
-    auto label = lv_label_create(btn);
-    lv_label_set_text(label, "Button");
-    lv_obj_center(label);
-
-    label_timer = lv_label_create(lv_scr_act());
-    lv_obj_set_style_text_font(label_timer, &lv_font_montserrat_22, LV_STATE_DEFAULT);
-    lv_obj_align(label_timer, LV_ALIGN_BOTTOM_MID, 0, -50);
-
-    label_some_text = lv_label_create(lv_scr_act());
-    lv_obj_set_style_text_font(label_some_text, &lv_font_montserrat_22, LV_STATE_DEFAULT);
-    lv_obj_align(label_some_text, LV_ALIGN_BOTTOM_MID, 0, -80);
-}
-
-void setup()
-{
-    Serial.begin(115200);
-
-    smartdisplay_init();
-    setup_mainscreen();
-}
-
-void loop()
-{
-    auto r = (byte)(millis() / 75);
-    auto g = (byte)(millis() / 10);
-    auto b = (byte)(millis() / 150);
-
-    smartdisplay_set_led_color(lv_color32_t({.ch = {.blue = b, .green = g, .red = r}}));
-
-    display_update();
-    lv_timer_handler();
+    if (i == 3) {
+        digitalWrite(led_pin[0], LOW);
+        digitalWrite(led_pin[1], LOW);
+        digitalWrite(led_pin[2], LOW);
+    }
 }
