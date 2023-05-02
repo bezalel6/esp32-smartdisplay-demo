@@ -14,6 +14,8 @@ using namespace std;
 #define SD_MOSI 23
 #define SD_CS 5
 
+#define DEFAULT_TEXT_SIZE 3
+
 #define LIGHT_ADC 34
 
 int led_pin[3] = {17, 4, 16};
@@ -43,8 +45,8 @@ void setup(void) {
     // digitalWrite(LCD_BL, HIGH);
 
     lcd.init();
-
-    // lcd.setRotation(0);
+    lcd.setTextSize(DEFAULT_TEXT_SIZE);
+    lcd.setRotation(0);
     // print_img(SD, "/logo.bmp", 240, 320);
     Rectangle bounds = {10, 10, 100, 100};
     Button btn(bounds, "hello");
@@ -55,7 +57,7 @@ void setup(void) {
 }
 
 void loop(void) {
-    lcd.clear();
+    // lcd.clear();
     for (auto component : components) {
         if (component.checkTouching(lcd)) {
             component.clicked();
@@ -89,6 +91,9 @@ void touch_calibration() {
     if (lcd.isEPD())
         std::swap(fg, bg);
     lcd.calibrateTouch(nullptr, fg, bg, std::max(lcd.width(), lcd.height()) >> 3);
+
+    lcd.clear();
+    lcd.setTextSize(DEFAULT_TEXT_SIZE);
 }
 
 void led_set(int i) {
