@@ -1,12 +1,13 @@
 // 测试通过
-
-#include <FS.h>
-#include <SD.h>
 #include <SPI.h>
 
 #include <vector>
 
+#include "BluetoothSerial.h"
 #include "ESP32_SPI_9341.h"
+#include "GUI/button.hpp"
+#include "GUI/component.hpp"
+using namespace std;
 
 #define SD_SCK 18
 #define SD_MISO 19
@@ -17,11 +18,17 @@
 
 int led_pin[3] = {17, 4, 16};
 
-SPIClass SD_SPI;
-
 LGFX lcd;
+
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
+
+BluetoothSerial SerialBT;
+
+vector<Button> components;
+
 void touch_calibration();
-void touch_continue();
 void led_set(int i);
 void setup(void) {
     pinMode(led_pin[0], OUTPUT);
@@ -30,50 +37,40 @@ void setup(void) {
 
     Serial.begin(115200);
 
+    SerialBT.begin("ESP32test");  // Bluetooth device name
+    Serial.println("The device started, now you can pair it with bluetooth!");
     // pinMode(LCD_BL, OUTPUT);
     // digitalWrite(LCD_BL, HIGH);
 
     lcd.init();
-    // sd_init();
-    // sd_test();
 
     // lcd.setRotation(0);
     // print_img(SD, "/logo.bmp", 240, 320);
+    Rectangle bounds = {10, 10, 100, 100};
+    Button btn(bounds, "hello");
+    components.push_back(btn);
+    // components.push_back())
 
-    delay(1000);
-
-    // touch_calibration();
-    touch_continue();
+    touch_calibration();
 }
 
-static int colors[] = {TFT_RED, TFT_GREEN, TFT_BLUE, TFT_YELLOW, TFT_OLIVE};
-
-int i = 0;
-long runtime_0 = 0;
-long runtime_1 = 0;
-
 void loop(void) {
-    if ((millis() - runtime_0) > 1000) {
-        led_set(i);
-        lcd.fillScreen(colors[i++]);
-
-        if (i > 4) {
-            i = 0;
+    lcd.clear();
+    for (auto component : components) {
+        if (component.checkTouching(lcd)) {
+            component.clicked();
         }
-
-        runtime_0 = millis();
+        component.draw(lcd);
+    }
+    if (Serial.available()) {
+        SerialBT.write(Serial.read());
     }
 
-    if ((millis() - runtime_1) > 300) {
-        int adc_value = analogRead(LIGHT_ADC);
-        Serial.printf("ADC:%d\n", adc_value);
-        if (adc_value > 50)
-            lcd.setBrightness(50);
-        else
-            lcd.setBrightness(255);
-        runtime_1 = millis();
+    if (SerialBT.available()) {
+        lcd.println(SerialBT.readString());
+        // Serial.write(SerialBT.read());
     }
-    delay(10);
+    delay(20);
 }
 
 void touch_calibration() {
@@ -92,33 +89,6 @@ void touch_calibration() {
     if (lcd.isEPD())
         std::swap(fg, bg);
     lcd.calibrateTouch(nullptr, fg, bg, std::max(lcd.width(), lcd.height()) >> 3);
-}
-
-void touch_continue() {
-    lcd.fillScreen(TFT_YELLOW);
-
-    lcd.fillRect(60, 100, 120, 120, TFT_BLACK);
-
-    lcd.setTextColor(TFT_MAGENTA);
-    lcd.setTextSize(2);
-    lcd.setCursor(70, 110);
-    lcd.println(" TOUCH");
-    lcd.setCursor(70, 130);
-    lcd.println("  TO");
-    lcd.setCursor(70, 150);
-    lcd.println("CONTINUE");
-
-    int pos[2] = {0, 0};
-
-    lcd.drawPixel(50, 50, TFT_BROWN);
-
-    while (1) {
-        if (lcd.getTouch(&pos[0], &pos[1])) {
-            if (pos[0] > 60 && pos[0] < 180 && pos[1] > 120 && pos[1] < 240)
-                break;
-            delay(100);
-        }
-    }
 }
 
 void led_set(int i) {
